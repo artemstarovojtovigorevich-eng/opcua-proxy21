@@ -133,7 +133,7 @@ func (s *Server) Start(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			s.conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+			_ = s.conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
 			n, _, err := s.conn.ReadFromUDP(buf)
 			if err != nil {
 				continue

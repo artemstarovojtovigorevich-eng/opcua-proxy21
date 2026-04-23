@@ -275,37 +275,6 @@ func (r *Reader) getVariableInfo(ctx context.Context, nodeID *ua.NodeID) NodeInf
 	return info
 }
 
-func dataTypeToString(typeID uint32) string {
-	switch typeID {
-	case 1:
-		return "Boolean"
-	case 3:
-		return "Int16"
-	case 4:
-		return "UInt16"
-	case 5:
-		return "Int32"
-	case 6:
-		return "UInt32"
-	case 7:
-		return "Int64"
-	case 8:
-		return "UInt64"
-	case 10:
-		return "Float"
-	case 11:
-		return "Double"
-	case 12:
-		return "String"
-	case 13:
-		return "DateTime"
-	case 16:
-		return "ByteString"
-	default:
-		return fmt.Sprintf("Unknown(%d)", typeID)
-	}
-}
-
 func (r *Reader) DiscoverNodes(ctx context.Context) error {
 	nodes, err := r.BrowseAllNamespaces(ctx, "ns=0;i=85", 0)
 	if err != nil {

@@ -18,7 +18,6 @@ type UDPServer struct {
 	store  *store.Store
 	logger Logger
 	ready  chan struct{}
-	nextID uint32
 }
 
 type ServerLogger interface {

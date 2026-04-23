@@ -118,41 +118,40 @@ func convertValue(v interface{}) *pb.Value {
 	}
 
 	val := &pb.Value{}
-	rv := reflect.ValueOf(v)
 
-	switch v.(type) {
+	switch x := v.(type) {
 	case bool:
-		val.Value = &pb.Value_BoolValue{BoolValue: v.(bool)}
+		val.Value = &pb.Value_BoolValue{BoolValue: x}
 	case int:
-		val.Value = &pb.Value_Int64Value{Int64Value: int64(v.(int))}
+		val.Value = &pb.Value_Int64Value{Int64Value: int64(x)}
 	case int8:
-		val.Value = &pb.Value_Int64Value{Int64Value: int64(v.(int8))}
+		val.Value = &pb.Value_Int64Value{Int64Value: int64(x)}
 	case int16:
-		val.Value = &pb.Value_Int64Value{Int64Value: int64(v.(int16))}
+		val.Value = &pb.Value_Int64Value{Int64Value: int64(x)}
 	case int32:
-		val.Value = &pb.Value_Int64Value{Int64Value: int64(v.(int32))}
+		val.Value = &pb.Value_Int64Value{Int64Value: int64(x)}
 	case int64:
-		val.Value = &pb.Value_Int64Value{Int64Value: v.(int64)}
+		val.Value = &pb.Value_Int64Value{Int64Value: x}
 	case uint:
-		val.Value = &pb.Value_Uint64Value{Uint64Value: uint64(v.(uint))}
+		val.Value = &pb.Value_Uint64Value{Uint64Value: uint64(x)}
 	case uint8:
-		val.Value = &pb.Value_Uint64Value{Uint64Value: uint64(v.(uint8))}
+		val.Value = &pb.Value_Uint64Value{Uint64Value: uint64(x)}
 	case uint16:
-		val.Value = &pb.Value_Uint64Value{Uint64Value: uint64(v.(uint16))}
+		val.Value = &pb.Value_Uint64Value{Uint64Value: uint64(x)}
 	case uint32:
-		val.Value = &pb.Value_Uint64Value{Uint64Value: uint64(v.(uint32))}
+		val.Value = &pb.Value_Uint64Value{Uint64Value: uint64(x)}
 	case uint64:
-		val.Value = &pb.Value_Uint64Value{Uint64Value: v.(uint64)}
+		val.Value = &pb.Value_Uint64Value{Uint64Value: x}
 	case float32:
-		val.Value = &pb.Value_DoubleValue{DoubleValue: float64(v.(float32))}
+		val.Value = &pb.Value_DoubleValue{DoubleValue: float64(x)}
 	case float64:
-		val.Value = &pb.Value_DoubleValue{DoubleValue: v.(float64)}
+		val.Value = &pb.Value_DoubleValue{DoubleValue: x}
 	case string:
-		val.Value = &pb.Value_StringValue{StringValue: v.(string)}
+		val.Value = &pb.Value_StringValue{StringValue: x}
 	case []byte:
-		val.Value = &pb.Value_BytesValue{BytesValue: v.([]byte)}
+		val.Value = &pb.Value_BytesValue{BytesValue: x}
 	default:
-		if rv.Kind() == reflect.Ptr {
+		if rv := reflect.ValueOf(v); rv.Kind() == reflect.Ptr {
 			elem := rv.Elem()
 			if elem.IsValid() {
 				return convertValue(elem.Interface())

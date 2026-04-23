@@ -41,7 +41,7 @@ func Load() *Config {
 	cfg := &Config{
 		OPCEndpoint:     flag.String("endpoint", "opc.tcp://localhost:50000", "OPC UA Endpoint URL"),
 		UDPDest:         flag.String("udp", "localhost:50001", "UDP destination address"),
-PollInterval: flag.Duration("poll-interval", 500*time.Millisecond, "Poll interval"),
+PollInterval: flag.Duration("poll-interval", 20*time.Millisecond, "Poll interval"),
 		CertFile:        flag.String("cert", "cert.pem", "Path to certificate file"),
 		KeyFile:         flag.String("key", "key.pem", "Path to PEM Private Key file"),
 		GenCert:         flag.Bool("gen-cert", false, "Generate a new certificate"),
