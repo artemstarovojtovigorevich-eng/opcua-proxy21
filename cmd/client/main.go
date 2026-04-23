@@ -46,7 +46,7 @@ func main() {
 		"udp", cfg.GetUDPDest(),
 		"sourceID", cfg.GetSourceID(),
 		"pollInterval", cfg.GetPollInterval(),
-		"readonly", cfg.GetReadOnly(),
+		"discoverNodes", cfg.GetDiscoverNodes(),
 	)
 
 	app := NewApp(cfg, log)
@@ -77,7 +77,6 @@ func (app *App) Start(ctx context.Context) error {
 		return err
 	}
 
-	// Try discovery first
 	discovery := opcua.NewDiscovery(app.cfg.GetOPCEndpoint(), app.log)
 	endpoints, err := discovery.GetEndpoints(ctx)
 	if err != nil {
@@ -105,35 +104,39 @@ func (app *App) Start(ctx context.Context) error {
 		return err
 	}
 
-	var nodes []opcua.Node
+	var nodes []opcua.NodeInfo
 	if app.cfg.GetDiscoverNodes() {
-		app.log.Info("Starting node discovery", "browsePath", app.cfg.GetBrowsePath(), "namespace", app.cfg.GetNodeNamespace())
-		browsePath := app.cfg.GetBrowsePath()
-		namespaceFilter := app.cfg.GetNodeNamespace()
+		app.log.Info("Starting full node discovery with metadata")
+		app.reader = opcua.NewReader(app.opcClient, nil, app.log)
 
-		discoveredNodes, err := opcua.NewReader(app.opcClient, nil, app.log).BrowseAllNodes(ctx, browsePath, namespaceFilter)
-		if err != nil {
+		if err := app.reader.DiscoverNodes(ctx); err != nil {
 			app.log.Error("Node discovery failed", "error", err)
 			return err
 		}
+		nodes = app.reader.GetNodeInfos()
 
-		app.log.Info("Discovered nodes", "count", len(discoveredNodes))
-		for _, n := range discoveredNodes {
-			app.log.Debug("Found node", "id", n.ID, "name", n.Name)
+		app.log.Info("Discovered nodes", "count", len(nodes))
+		for _, n := range nodes {
+			app.log.Debug("Found node",
+				"id", n.ID,
+				"name", n.Name,
+				"data_type", n.DataType,
+			)
 		}
-		nodes = discoveredNodes
 	} else {
-		nodes = []opcua.Node{
-			{ID: "ns=3;s=FastUInt1", Name: "FastUInt1"},
-			{ID: "ns=3;s=SlowUInt1", Name: "SlowUInt1"},
-			{ID: "ns=3;s=StepUp", Name: "StepUp"},
-			{ID: "ns=3;s=AlternatingBoolean", Name: "AlternatingBoolean"},
-			{ID: "ns=3;s=RandomSignedInt32", Name: "RandomSignedInt32"},
+		nodes = []opcua.NodeInfo{
+			{ID: "ns=3;s=FastUInt1", Name: "FastUInt1", DataType: "UInt32"},
+			{ID: "ns=3;s=SlowUInt1", Name: "SlowUInt1", DataType: "UInt32"},
+			{ID: "ns=3;s=StepUp", Name: "StepUp", DataType: "UInt32"},
+			{ID: "ns=3;s=AlternatingBoolean", Name: "AlternatingBoolean", DataType: "Boolean"},
+			{ID: "ns=3;s=RandomSignedInt32", Name: "RandomSignedInt32", DataType: "Int32"},
 		}
 		app.log.Info("Using hardcoded nodes", "count", len(nodes))
 	}
 
-	app.reader = opcua.NewReader(app.opcClient, nodes, app.log)
+	if app.reader == nil {
+		app.reader = opcua.NewReader(app.opcClient, nil, app.log)
+	}
 
 	if !app.cfg.GetReadOnly() {
 		app.sender = sender.NewUDStreamSender(app.cfg.GetUDPDest(), app.cfg.GetSourceID())
@@ -156,26 +159,65 @@ func (app *App) pollLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			data, err := app.reader.Read(ctx)
-			if err != nil {
-				app.log.Error("Failed to read data", "error", err)
-				continue
-			}
+			if app.cfg.GetDiscoverNodes() {
+				data, err := app.reader.ReadDiscoveredNodes(ctx)
+				if err != nil {
+					app.log.Error("Failed to read data", "error", err)
+					continue
+				}
 
-			if len(data) > 0 {
-				if app.cfg.GetReadOnly() {
-					app.log.Info("Read values", "count", len(data))
-					for _, d := range data {
-						app.log.Debug("Node value",
-							"node_id", d.NodeID,
-							"value", fmt.Sprintf("%v", d.Value),
-						)
+				app.log.Debug("Read completed", "count", len(data))
+
+				if len(data) > 0 {
+					sendData := data
+					if len(sendData) > 15 {
+						sendData = sendData[:15]
 					}
-				} else {
-					if err := app.sender.Send(app.cfg.GetOPCEndpoint(), data); err != nil {
-						app.log.Error("Failed to send", "error", err)
+
+					if app.cfg.GetReadOnly() {
+						app.log.Info("Read values", "count", len(sendData))
 					} else {
-						app.log.Info("Data sent", "count", len(data))
+						if err := app.sender.SendNodesWithMetadata(app.cfg.GetOPCEndpoint(), sendData); err != nil {
+							app.log.Error("Failed to send", "error", err)
+						} else {
+							app.log.Info("Sent", "count", len(sendData))
+						}
+					}
+				}
+			} else {
+				// hardcoded mode: read known nodes
+				nodes := []opcua.Node{
+					{ID: "ns=3;s=FastUInt1", Name: "FastUInt1"},
+					{ID: "ns=3;s=SlowUInt1", Name: "SlowUInt1"},
+					{ID: "ns=3;s=StepUp", Name: "StepUp"},
+					{ID: "ns=3;s=AlternatingBoolean", Name: "AlternatingBoolean"},
+					{ID: "ns=3;s=RandomSignedInt32", Name: "RandomSignedInt32"},
+				}
+				data, err := app.reader.ReadMultiple(ctx, nodes)
+				if err != nil {
+					app.log.Error("Failed to read data", "error", err)
+					continue
+				}
+
+				if len(data) > 0 {
+					// convert DataValue to NodeInfo for sender
+					nodeInfos := make([]opcua.NodeInfo, len(data))
+					for i, d := range data {
+						nodeInfos[i] = opcua.NodeInfo{
+							ID:        d.NodeID,
+							Value:     d.Value,
+							Timestamp: d.Timestamp,
+						}
+					}
+
+					if app.cfg.GetReadOnly() {
+						app.log.Info("Read values", "count", len(data))
+					} else {
+						if err := app.sender.SendNodesWithMetadata(app.cfg.GetOPCEndpoint(), nodeInfos); err != nil {
+							app.log.Error("Failed to send", "error", err)
+						} else {
+							app.log.Info("Sent", "count", len(data))
+						}
 					}
 				}
 			}

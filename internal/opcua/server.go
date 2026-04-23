@@ -128,8 +128,12 @@ func (s *UDPServer) createNode(nodeID *ua.NodeID, msg *UDMessage) {
 		varName = sid
 	}
 
+	if msg.BrowseName != "" {
+		varName = msg.BrowseName
+	}
+
 	dispName := attrs.BrowseName(varName)
-	dataType := getDataType(msg.Value)
+	dataType := getDataTypeFromString(msg.DataType, msg.Value)
 
 	node := server.NewNode(
 		nodeID,
@@ -162,7 +166,7 @@ func (s *UDPServer) createNode(nodeID *ua.NodeID, msg *UDMessage) {
 
 	s.store.Update(nodeID.String(), msg.Value, timestamp, quality)
 
-	s.logger.Debug("Node created", "node_id", nodeID.String())
+	s.logger.Debug("Node created", "node_id", nodeID.String(), "name", varName)
 }
 
 func (s *UDPServer) updateNodeValue(nodeID *ua.NodeID, msg *UDMessage) {
@@ -198,6 +202,29 @@ func getDataType(v interface{}) *ua.ExpandedNodeID {
 	return ua.NewExpandedNodeID(ua.NewNumericNodeID(0, typeID), "", typeID)
 }
 
+func getDataTypeFromString(dataType string, v interface{}) *ua.ExpandedNodeID {
+	typeMap := map[string]uint32{
+		"Boolean":   id.Boolean,
+		"Int16":    id.Int16,
+		"UInt16":   id.UInt16,
+		"Int32":    id.Int32,
+		"UInt32":   id.UInt32,
+		"Int64":    id.Int64,
+		"UInt64":   id.UInt64,
+		"Float":    id.Float,
+		"Double":   id.Double,
+		"String":   id.String,
+		"DateTime": id.DateTime,
+		"ByteString": id.ByteString,
+	}
+
+	if typeID, ok := typeMap[dataType]; ok {
+		return ua.NewExpandedNodeID(ua.NewNumericNodeID(0, typeID), "", typeID)
+	}
+
+	return getDataType(v)
+}
+
 func toUADataValue(val *store.DataValue) *ua.DataValue {
 	dv := &ua.DataValue{
 		SourceTimestamp: val.SourceTimestamp,
@@ -212,4 +239,6 @@ type UDMessage struct {
 	Value       interface{}
 	TimestampNs uint64
 	Quality     uint16
+	BrowseName  string
+	DataType    string
 }

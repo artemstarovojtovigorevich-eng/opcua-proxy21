@@ -6,15 +6,15 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/artemstarovojtovigorevich-eng/go-udstream/pkg/udstream"
-	pb "github.com/artemstarovojtovigorevich-eng/go-udstream/proto/pb/proto"
+	"opcua-proxy21/pkg/udstream/client"
+	pb "opcua-proxy21/pkg/udstream/pb"
 	"opcua-proxy21/internal/opcua"
 )
 
 type UDStreamSender struct {
 	addr     string
 	sourceID uint32
-	client   *udstream.Client
+	client   *client.Client
 }
 
 func NewUDStreamSender(addr string, sourceID uint32) *UDStreamSender {
@@ -25,7 +25,7 @@ func NewUDStreamSender(addr string, sourceID uint32) *UDStreamSender {
 }
 
 func (s *UDStreamSender) Connect() error {
-	client, err := udstream.NewClient(s.addr, s.sourceID)
+	client, err := client.NewClient(s.addr, s.sourceID)
 	if err != nil {
 		return fmt.Errorf("failed to create udstream client: %w", err)
 	}
@@ -40,14 +40,55 @@ func (s *UDStreamSender) Close() error {
 	return nil
 }
 
-func (s *UDStreamSender) Send(endpoint string, data []opcua.DataValue) error {
+func (s *UDStreamSender) SendNodesWithMetadata(endpoint string, nodes []opcua.NodeInfo) error {
+	if s.client == nil {
+		return fmt.Errorf("not connected")
+	}
+
+	if len(nodes) == 0 {
+		return nil
+	}
+
+	const maxBatch = 5
+	batches := (len(nodes) + maxBatch - 1) / maxBatch
+	for i := 0; i < len(nodes); i += maxBatch {
+		end := i + maxBatch
+		if end > len(nodes) {
+			end = len(nodes)
+		}
+
+		batch := nodes[i:end]
+		messages := make([]*pb.Message, len(batch))
+		for j, node := range batch {
+			messages[j] = convertNodeInfo(node)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		timestamp := uint64(time.Now().UnixNano())
+		batchNum := i / maxBatch
+		if err := s.client.SendFull(ctx, timestamp, messages); err != nil {
+			return fmt.Errorf("batch %d failed: %w", batchNum, err)
+		}
+	}
+
+	fmt.Printf("Total sent: %d nodes in %d batches\n", len(nodes), batches)
+	return nil
+}
+
+func (s *UDStreamSender) SendDelta(endpoint string, data []opcua.DataValue) error {
 	if s.client == nil {
 		return fmt.Errorf("not connected")
 	}
 
 	messages := make([]*pb.Message, len(data))
 	for i, dv := range data {
-		messages[i] = convertDataValue(dv)
+		messages[i] = convertNodeInfo(opcua.NodeInfo{
+			ID:        dv.NodeID,
+			Value:     dv.Value,
+			Timestamp: dv.Timestamp,
+		})
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -57,12 +98,16 @@ func (s *UDStreamSender) Send(endpoint string, data []opcua.DataValue) error {
 	return s.client.SendFull(ctx, timestamp, messages)
 }
 
-func convertDataValue(dv opcua.DataValue) *pb.Message {
+func convertNodeInfo(node opcua.NodeInfo) *pb.Message {
 	msg := &pb.Message{
-		TimestampNs: uint64(dv.Timestamp.UnixNano()),
-		NodeId:      dv.NodeID,
+		TimestampNs: uint64(node.Timestamp.UnixNano()),
+		NodeId:      node.ID,
 		SourceId:    0,
-		Value:       convertValue(dv.Value),
+		Value:       convertValue(node.Value),
+		Metadata: &pb.NodeMetadata{
+			BrowseName: node.BrowseName,
+			DataType: node.DataType,
+		},
 	}
 	return msg
 }

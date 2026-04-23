@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package udstream;
+
+option go_package = "opcua-proxy21/pkg/udstream/pb;pb";
+
+message Value {
+  oneof value {
+    double double_value = 1;
+    float  float_value = 2;
+    int64  int64_value = 3;
+    uint64 uint64_value = 4;
+    bool   bool_value = 5;
+    string string_value = 6;
+    bytes  bytes_value = 7;
+  }
+}
+
+message NodeMetadata {
+  string browse_name = 1;
+  string data_type = 2;
+  uint32 access_level = 3;
+  string description = 4;
+  double eu_range_low = 5;
+  double eu_range_high = 6;
+  string engineering_units = 7;
+}
+
+message Message {
+  uint64 timestamp_ns = 1;
+  string node_id = 2;
+  Value  value = 3;
+  uint32 source_id = 4;
+
+  NodeMetadata metadata = 10;
+}
+
+message DeltaBatch {
+  uint32 seq = 1;
+  repeated Message messages = 2;
+}
+
+message FullSnapshot {
+  uint64 timestamp = 1;
+  uint32 source_id = 2;
+  repeated Message nodes = 3;
+}
+
+message Packet {
+  oneof payload {
+    DeltaBatch delta = 1;
+    FullSnapshot full = 2;
+  }
+}

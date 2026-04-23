@@ -8,8 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/artemstarovojtovigorevich-eng/go-udstream/pkg/udstream"
-	pb "github.com/artemstarovojtovigorevich-eng/go-udstream/proto/pb/proto"
+	"opcua-proxy21/pkg/udstream"
+	pb "opcua-proxy21/pkg/udstream/pb"
 	"opcua-proxy21/internal/logger"
 	"opcua-proxy21/internal/opcua"
 	"opcua-proxy21/internal/store"
@@ -80,11 +80,20 @@ func (h *Handler) logMessage(msg *pb.Message) {
 }
 
 func convertMessage(msg *pb.Message) *opcua.UDMessage {
+	var browseName, dataType string
+
+	if msg.Metadata != nil {
+		browseName = msg.Metadata.BrowseName
+		dataType = msg.Metadata.DataType
+	}
+
 	return &opcua.UDMessage{
 		NodeId:      msg.NodeId,
-		Value:       convertValue(msg.Value),
+		Value:      convertValue(msg.Value),
 		TimestampNs: msg.TimestampNs,
-		Quality:     0,
+		Quality:    0,
+		BrowseName: browseName,
+		DataType:   dataType,
 	}
 }
 
