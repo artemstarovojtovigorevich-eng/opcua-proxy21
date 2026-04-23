@@ -1,0 +1,47 @@
+services:
+  opcua-test-server:
+    image: mcr.microsoft.com/iotedge/opc-plc:latest
+    container_name: opcua-test-server
+    ports:
+      - "50000:50000"
+    command: >
+      --pn=50000
+      --autoaccept
+      --sph
+      --sn=5
+      --sr=10
+      --st=uint
+      --fn=5
+      --fr=1
+      --ft=uint
+      --gn=5
+    restart: unless-stopped
+
+  udp-receiver:
+    image: busybox:1.36
+    container_name: udp-receiver
+    command: ["sh", "-c", "nc -u -l -p 50001 -k -v"]
+    ports:
+      - "50001:50001/udp"
+    restart: unless-stopped
+
+  opcua-proxy21:
+    build:
+      context: ./opcua-proxy21
+      dockerfile: Dockerfile
+    container_name: opcua-proxy
+    ports:
+      - "8080:8080"
+    environment:
+      - OPC_ENDPOINT=opc.tcp://opcua-test-server:50000
+      - UDP_DEST=udp-receiver:50001
+      - POLL_INTERVAL=1s
+      - LOG_LEVEL=info
+      - LOG_ENCODING=console
+    depends_on:
+      opcua-test-server:
+        condition: service_started
+      udp-receiver:
+        condition: service_started
+    restart: unless-stopped
+artem@OTR-STAROVOITOV:~/Desktop/OPC-OWG$ 
